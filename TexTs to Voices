@@ -36,13 +36,13 @@ $from_id = $update->message->from->id;
 if ($text === '/start') {
 bot('sendMessage', [
 'chat_id' => $chat_id, 
-'text' => '* Hello *' [ ' . $name . '](tg://user?id=' . $from_id . ') '* Please send me a TexTs and I will make it a voice for free.  *',
+'text' => '* Hello -  ٭* [ ' . $name . '](tg://user?id=' . $from_id . ') * Please send me a TexTs and I will make it a voice for free*'
 'parse_mode' => 'Markdown',
 'reply_to_message_id' => $message_id, 
 'disable_web_page_preview' => true,
 'reply_markup' => json_encode([
 'inline_keyboard' => [
-[['text' => '「 DeV  」', 'url' => 'PuT Your accounT Link], ['text' => '「 channel 」', 'url' => 'PuT Link']]
+[['text' => '「 DeV  」', 'url' => 'https://t.me/ggghh], ['text' => '「 channel 」', 'url' => 'https://t.me/htfttt']]
 ]
 ])
 ]);
@@ -81,7 +81,7 @@ unlink("voice.mp3");
 } else {
 bot('sendMessage', [
 'chat_id' => $chat_id,
-'text' => "* Oops! I can't convert it, Try again  *",
+'text' => "* Oops! I can't convert it, Try again.*",
 'parse_mode' => 'Markdown',
 'reply_to_message_id' => $message_id, 
 ]);
