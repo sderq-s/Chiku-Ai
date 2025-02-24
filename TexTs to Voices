@@ -1,12 +1,10 @@
-//𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
-//• لا تنسى ذكر حقوق المطور توم
-//• المطور ↦ @T_0_M0 ↤
-//• قناة المطور ↦ @izeoe ↤
-//𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
+This code by @Mecenw 
+Let's Go!
+
 <?php
 ob_start();
-error_reporting(0);
-define("API_KEY", '7344635881:AAEPIvPNvwWEWlNfZSRFOBtaGcVyisC-TEQ'); 
+error_reporting(0) 
+define("API_KEY", 'PuT API here'); 
 $botname = bot('getMe', [])->result->username;
 function bot($method, $datas = []) {
 $url = "https://api.telegram.org/bot" . API_KEY . "/$method";
@@ -21,12 +19,8 @@ var_dump(curl_error($ch));
 return json_decode($res);
 }
 }
-// 𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
 
-
-// هنا تكدر تضيف لوحة ادمن اذا تحب
-
-
+// Here you can add an admin Panel if you want.
 // 𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
 $update = json_decode(file_get_contents('php://input'));
 $message = $update->message;
@@ -37,22 +31,18 @@ $user = $message->from->username;
 $message_id = $update->message->message_id;
 $from_id = $update->message->from->id;
 //𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
-//• لا تنسى ذكر حقوق المطور توم
-//• المطور ↦ @T_0_M0 ↤
-//• قناة المطور ↦ @izeoe ↤
+// This code by @Mecenw
 //𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
 if ($text === '/start') {
 bot('sendMessage', [
 'chat_id' => $chat_id, 
-'text' => '*٭ - هلا بيك عمري* [ ' . $name . '](tg://user?id=' . $from_id . ') *🫀
-٭ - بوت تحويل النص الى صوت
-٭ - فقط ارسل الكلام بأي لغه*',
+'text' => '* Hello *' [ ' . $name . '](tg://user?id=' . $from_id . ') '* Please send me a TexTs and I will make it a voice for free.  *',
 'parse_mode' => 'Markdown',
 'reply_to_message_id' => $message_id, 
 'disable_web_page_preview' => true,
 'reply_markup' => json_encode([
 'inline_keyboard' => [
-[['text' => '「 مطور البوت 」', 'url' => 'https://t.me/T_0_M0'], ['text' => '「 قناة البوت 」', 'url' => 'https://t.me/+NohstPs7Dts1NmZi']]
+[['text' => '「 DeV  」', 'url' => 'PuT Your accounT Link], ['text' => '「 channel 」', 'url' => 'PuT Link']]
 ]
 ])
 ]);
@@ -64,9 +54,7 @@ $headers = [
 "Content-Type: application/json"
 ];
 //𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
-//• لا تنسى ذكر حقوق المطور توم
-//• المطور ↦ @T_0_M0 ↤
-//• قناة المطور ↦ @izeoe ↤
+// Again! The code by @Mecenw
 //𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
 $data = [
 "text" => $text,
@@ -93,16 +81,14 @@ unlink("voice.mp3");
 } else {
 bot('sendMessage', [
 'chat_id' => $chat_id,
-'text' => "*• حدث خطأ أثناء تحويل النص إلى كلام. يرجى المحاولة مرة أخرى.*",
+'text' => "* Oops! I can't convert it, Try again  *",
 'parse_mode' => 'Markdown',
 'reply_to_message_id' => $message_id, 
 ]);
 }
 }
 //𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
-//• لا تنسى ذكر حقوق المطور توم
-//• المطور ↦ @T_0_M0 ↤
-//• قناة المطور ↦ @izeoe ↤
+// Enjoy and make you own bots now!
 //𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
 ?>
 
