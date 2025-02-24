@@ -1,6 +1,3 @@
-This code by @Mecenw 
-Let's Go!
-
 <?php
 ob_start();
 error_reporting(0) 
@@ -20,8 +17,7 @@ return json_decode($res);
 }
 }
 
-// Here you can add an admin Panel if you want.
-// 𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳𓏳
+// Here you can add an admin Panel If you want.
 $update = json_decode(file_get_contents('php://input'));
 $message = $update->message;
 $text = $message->text;
@@ -36,7 +32,9 @@ $from_id = $update->message->from->id;
 if ($text === '/start') {
 bot('sendMessage', [
 'chat_id' => $chat_id, 
-'text' => '* Hello -  ٭* [ ' . $name . '](tg://user?id=' . $from_id . ') * Please send me a TexTs and I will make it a voice for free*'
+'text' => '*Hello -  ٭* [ ' . $name . '](tg://user?id=' . $from_id . ') *
+٭ - Please send me a TexTs and I will make it a voice for free
+٭ By me @Mecenw*',
 'parse_mode' => 'Markdown',
 'reply_to_message_id' => $message_id, 
 'disable_web_page_preview' => true,
@@ -73,7 +71,7 @@ file_put_contents("voice.mp3", $response);
 bot('sendAudio', [
 'chat_id' => $chat_id,
 'audio' => new CURLFile("voice.mp3"),
-'caption' => "*• Uploader : @laiecbot*", 
+'caption' => "*Generated*", 
 'parse_mode' => 'Markdown',
 'reply_to_message_id' => $message_id, 
 ]);
