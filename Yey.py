@@ -1,6 +1,6 @@
 import logging
 import random
-from telegram import Update
+from telegram import Update, ChatMember
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -9,101 +9,84 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# === إعداد السجلات ===
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
-
-# === توكن البوت ===
+# === التوكن ===
 BOT_TOKEN = "7680410833:AAESNMhjnk__RSn1cwZB0Sj-4qMmqFfY3TU"
 
-# === بيانات البوت (في الذاكرة) ===
-# رصيد المستخدمين: { user_id: balance_int }
-balances = {}
-# تحديات الكلمات الحالية: { user_id: current_word }
-challenges = {}
+# === سجلات ===
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# قائمة الكلمات العشوائية لأمر "كلمات"
+# === تخزين بيانات المستخدمين ===
+balances = {}       # {user_id: balance}
+challenges = {}     # {user_id: current_word}
+
+# === قائمة طويلة من الكلمات ===
 WORDS_LIST = [
-    "شجاع", "مبدع", "سريع", "صادق", "متميز",
-    "متعاون", "مرن", "مبتكر", "حكيم", "مرح"
+    "شجاع", "ذكي", "سريع", "جميل", "صادق", "مميز", "مذهل", "قوي", "لطيف",
+    "مرح", "هادئ", "عالي", "مشرق", "نقي", "كبير", "صغير", "مفيد", "بارع",
+    "مبتسم", "سعيد", "كريم", "طموح", "هادف", "مرن", "مخترع", "مؤدب", "عبقري",
+    "محترف", "ذووق", "وسيم", "ذوّاق", "متألق"
 ]
 
-
 # === /start ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "مرحباً! ⭐️\n"
-        "أضفني كمشرف في مجموعتك ثم أرسل:\n"
-        "- رصيدي\n"
-        "- رصيده (رداً على رسالة أحد)\n"
-        "- كلمات\n\n"
-        "كل كلمة تعيد إرسالها تكسبك 20 نجمة!"
+        "مرحباً بك! ⭐\n"
+        "- أرسل 'كلمات' لتربح نجوم.\n"
+        "- أرسل 'رصيدي' لمعرفة رصيدك.\n"
+        "- أرسل 'رصيده' رداً على رسالة أحد لمعرفة رصيده.\n\n"
+        "أعد كتابة الكلمة لتحصل على 20 نجمة!"
     )
 
 
-# === أمر "كلمات" ===
-async def send_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = update.message
-    if msg.text == "كلمات":
-        word = random.choice(WORDS_LIST)
-        challenges[msg.from_user.id] = word
-        await msg.reply_text(
-            f"أعد كتابة هذه الكلمة، وأحصل على نجوم إضافية: {word}"
-        )
+# === كلمات ===
+async def words(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    word = random.choice(WORDS_LIST)
+    challenges[user_id] = word
+    await update.message.reply_text(
+        f"أعد كتابة هذه الكلمة، وأحصل على نجوم إضافية: {word}"
+    )
 
 
-# === التحقق من إعادة إرسال الكلمة ===
-async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = update.message
-    user_id = msg.from_user.id
-    text = msg.text.strip()
-    # هل هناك تحدي مفتوح لهذا المستخدم؟
+# === تحقق من إجابة صحيحة ===
+async def check_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    text = update.message.text.strip()
     if user_id in challenges and text == challenges[user_id]:
-        # أكسب 20 نجمة
         balances[user_id] = balances.get(user_id, 0) + 20
-        # أرسل التهنئة
-        await msg.reply_text(
-            "ممتاز، لقد حصلت على 20 نجمة كهدية."
-        )
-        # إحذف التحدي
         del challenges[user_id]
+        await update.message.reply_text("ممتاز! لقد فزت بـ20 نجمة.")
 
 
-# === أوامر الرصيد ===
-async def handle_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# === رصيدي ===
+async def my_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text.strip() == "رصيدي":
+        user_id = update.message.from_user.id
+        bal = balances.get(user_id, 0)
+        await update.message.reply_text(f"رصيدك: {bal} نجوم")
+
+
+# === رصيده ===
+async def his_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    text = msg.text.strip()
-    # رصيدي
-    if text == "رصيدي":
-        bal = balances.get(msg.from_user.id, 0)
-        await msg.reply_text(f"رصيدك: {bal} نجوم")
-    # رصيده (رداً على رسالة)
-    elif text == "رصيده" and msg.reply_to_message:
+    if msg.text.strip() == "رصيده" and msg.reply_to_message:
         target = msg.reply_to_message.from_user
+        if target.is_bot:
+            return  # تجاهل الرد على بوتات
         bal = balances.get(target.id, 0)
         await msg.reply_text(f"رصيده: {bal} نجوم")
 
 
-def main() -> None:
+# === دمج كل شيء ===
+def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # ترحيب
     app.add_handler(CommandHandler("start", start))
-    # إرسال تحدي "كلمات"
-    app.add_handler(MessageHandler(
-        filters.TEXT & filters.ChatType.SUPERGROUP, send_challenge
-    ))
-    # التحقق من إجابة التحدي
-    app.add_handler(MessageHandler(
-        filters.TEXT & filters.ChatType.SUPERGROUP, check_answer
-    ))
-    # أوامر الرصيد
-    app.add_handler(MessageHandler(
-        filters.TEXT & filters.ChatType.SUPERGROUP, handle_balance
-    ))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, words))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, check_word))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, my_balance))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, his_balance))
 
     logger.info("البوت يعمل الآن...")
     app.run_polling()
