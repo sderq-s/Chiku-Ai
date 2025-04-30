@@ -1,123 +1,74 @@
-from pyrogram import Client, filters
-from pyrogram.types import Message
 import random
-import json
-import os
-import requests
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
-API_ID = 21613960
-API_HASH = "7a3c0a16230bb95af0b80403e81d0b7b"
-BOT_TOKEN = "7680410833:AAESNMhjnk__RSn1cwZB0Sj-4qMmqFfY3TU"
-GEMINI_API_KEY = "AIzaSyCqsASbw2mXQLOmXI3eGGp3jGdF_wiW4W8"
-DATA_FILE = "user_data.json"
+# Bot Token
+TOKEN = "7680410833:AAESNMhjnk__RSn1cwZB0Sj-4qMmqFfY3TU"
 
-app = Client("star_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# Initialize the bot
+updater = Updater(token=TOKEN, use_context=True)
+dispatcher = updater.dispatcher
 
-# Load or initialize user data
-if os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "r") as f:
-        users = json.load(f)
-else:
-    users = {}
+# User balance
+user_balance = {}
 
-current_word = None
+# List of random words
+random_words = ["apple", "banana", "cherry", "date", "elderberry", "fig", "grape", "honeydew"]
 
-def save_data():
-    with open(DATA_FILE, "w") as f:
-        json.dump(users, f)
+# Command to check balance
+def balance(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    balance = user_balance.get(user_id, 0)
+    update.message.reply_text(f"Your balance is: {balance} stars")
 
-def get_balance(user_id):
-    return users.get(str(user_id), {}).get("stars", 0)
+# Command to rewrite a word
+def rewrite_word(update: Update, context: CallbackContext):
+    word = random.choice(random_words)
+    update.message.reply_text(f"Rewrite a word and win stars: {word}")
 
-def add_stars(user_id, amount):
-    uid = str(user_id)
-    if uid not in users:
-        users[uid] = {"stars": 0}
-    users[uid]["stars"] += amount
-    save_data()
+# Command to handle winning
+def win(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    user_balance[user_id] = user_balance.get(user_id, 0) + 20
+    update.message.reply_text("Done, you won 20 stars.")
 
-def set_transfer_target(chat_id, target_username):
-    users[str(chat_id)]["transfer_target"] = target_username
-    save_data()
+# Command to transfer stars
+def transfer(update: Update, context: CallbackContext):
+    update.message.reply_text("Send a username so I send him stars.")
 
-def get_transfer_target(chat_id):
-    return users.get(str(chat_id), {}).get("transfer_target")
+# Command to handle username for transfer
+def handle_username(update: Update, context: CallbackContext):
+    username = context.args[0] if context.args else None
+    if username and username.isalnum():  # Simple validation for username
+        update.message.reply_text("Done!")
+    else:
+        update.message.reply_text("Oops, Invalid username..")
 
-@app.on_message(filters.text & filters.group)
-async def handle_messages(client, message: Message):
-    global current_word
-    user_id = message.from_user.id
-    text = message.text.strip()
+# Command to handle specific questions
+def handle_darlene(update: Update, context: CallbackContext):
+    if context.args:
+        question = " ".join(context.args)
+        update.message.reply_text(f"Darlene, you asked: {question}")
+    else:
+        update.message.reply_text("Please provide a question after 'Darlene,'.")
 
-    # Word Game Trigger
-    if text.lower() == "words":
-        current_word = random.choice(["Sky", "Apple", "Dream", "Python", "Book"])
-        await message.reply(f"Rewrite a word and win stars: {current_word}")
-    
-    # Winning the word game
-    elif current_word and text == current_word:
-        add_stars(user_id, 20)
-        await message.reply("Done, you won 20 stars.")
-        current_word = None
+# Command to handle /ask
+def ask(update: Update, context: CallbackContext):
+    if context.args:
+        question = " ".join(context.args)
+        update.message.reply_text(f"You asked: {question}")
+    else:
+        update.message.reply_text("Please provide a question after '/ask'.")
 
-    # Check balance
-    elif "رصيدي" in text or text.lower() == "my balance":
-        stars = get_balance(user_id)
-        await message.reply(f"Your balance is: {stars} stars")
+# Handlers
+dispatcher.add_handler(CommandHandler("balance", balance))
+dispatcher.add_handler(CommandHandler("rewrite", rewrite_word))
+dispatcher.add_handler(CommandHandler("win", win))
+dispatcher.add_handler(CommandHandler("transfer", transfer))
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_username))
+dispatcher.add_handler(MessageHandler(Filters.regex(r'^Darlene,'), handle_darlene))
+dispatcher.add_handler(CommandHandler("ask", ask))
 
-    # Star transfer start
-    elif text.lower() == "transfer":
-        if str(message.chat.id) not in users:
-            users[str(message.chat.id)] = {}
-        set_transfer_target(message.chat.id, None)
-        await message.reply("Send a username so I send him stars.")
-
-    # Receive username for transfer
-    elif get_transfer_target(message.chat.id) is None and text.startswith("@"):
-        recipient = text[1:]
-        target_user = None
-
-        for uid, info in users.items():
-            if info.get("username", "").lower() == recipient.lower():
-                target_user = uid
-                break
-
-        if target_user:
-            add_stars(target_user, 10)
-            await message.reply("Done!")
-        else:
-            await message.reply("Oops, Invalid username..")
-        set_transfer_target(message.chat.id, None)
-
-    # Gemini AI Q&A
-    elif text.startswith("Darlene, ") or text.startswith("/ask "):
-        query = text.replace("Darlene, ", "").replace("/ask ", "")
-        reply = gemini_response(query)
-        await message.reply(reply)
-
-    # Store username if available
-    if message.from_user.username:
-        uid = str(user_id)
-        if uid not in users:
-            users[uid] = {}
-        users[uid]["username"] = message.from_user.username
-        save_data()
-
-def gemini_response(prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    data = {
-        "contents": [
-            {
-                "parts": [{"text": prompt}]
-            }
-        ]
-    }
-    try:
-        res = requests.post(url, headers=headers, json=data)
-        output = res.json()
-        return output['candidates'][0]['content']['parts'][0]['text']
-    except Exception:
-        return "Sorry, I couldn't answer that."
-
-app.run()
+# Start the bot
+updater.start_polling()
+updater.idle()
