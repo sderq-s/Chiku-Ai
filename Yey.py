@@ -1,158 +1,87 @@
-import logging
 import random
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    ContextTypes,
-)
+from pyrogram import Client, filters
+import google.generativeai as genai
 
-# === إعداد السجلات ===
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+API_ID = 123456  # Replace with your API ID
+API_HASH = "your_api_hash"  # Replace with your API HASH
+BOT_TOKEN = "your_bot_token"
 
-# === توكن البوت ===
-BOT_TOKEN = "7680410833:AAESNMhjnk__RSn1cwZB0Sj-4qMmqFfY3TU"
+# Gemini setup
+GEMINI_API_KEY = "AIzaSyCqsASbw2mXQLOmXI3eGGp3jGdF_wiW4W8"
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-pro")
 
-# === بيانات البوت في الذاكرة ===
-balances = {}            # user_id: balance
-challenges = {}          # user_id: current_word
-addresses = {}           # user_id: static address
-address_to_user = {}     # address: user_id
-pending_transfer = {}    # user_id: {"step": 1, "target": None}
+app = Client("group_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-WORDS_LIST = [
-    "شجاع", "مبدع", "سريع", "صادق", "متميز",
-    "متعاون", "مرن", "مبتكر", "حكيم", "مرح"
-]
+# User data
+user_balances = {}
+word_game_active = False
+current_word = ""
 
-# === توليد عنوان ثابت للمستخدم ===
-def generate_address(user_id: int) -> str:
-    if user_id not in addresses:
-        address = str(random.randint(1000000000, 9999999999))
-        addresses[user_id] = address
-        address_to_user[address] = user_id
-    return addresses[user_id]
+# Random word generator
+def get_random_word():
+    words = ["Tree", "River", "Lion", "Music", "Ocean", "Space", "Stone"]
+    return random.choice(words)
 
-# === /start ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        "مرحباً! ⭐️\n"
-        "أضفني كمشرف في مجموعتك ثم أرسل:\n"
-        "- رصيدي\n"
-        "- رصيده (رداً على رسالة أحد)\n"
-        "- كلمات\n"
-        "- عنواني\n"
-        "- إرسال\n\n"
-        "كل كلمة تعيد إرسالها تكسبك 20 نجمة!"
-    )
+# Handlers
+@app.on_message(filters.command("start") & filters.private)
+def start(_, msg):
+    msg.reply("Bot is active in your group!")
 
-# === "كلمات" ===
-async def send_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = update.message
-    if msg.text == "كلمات":
-        word = random.choice(WORDS_LIST)
-        challenges[msg.from_user.id] = word
-        await msg.reply_text(f"أعد إرسال الكلمة التالية للحصول على المزيد من النجوم: {word}")
+@app.on_message(filters.text & filters.group)
+def handle_message(_, msg):
+    global word_game_active, current_word
 
-# === التحقق من الكلمة ===
-async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = update.message
+    text = msg.text.lower()
     user_id = msg.from_user.id
-    text = msg.text.strip()
+    username = msg.from_user.username or f"user_{user_id}"
 
-    if user_id in challenges and text == challenges[user_id]:
-        balances[user_id] = balances.get(user_id, 0) + 20
-        await msg.reply_text("تهانينا، لقد فزت بـ20 نجوم.")
-        del challenges[user_id]
+    # Initialize balance
+    if username not in user_balances:
+        user_balances[username] = 0
 
-# === الرصيد ===
-async def handle_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = update.message
-    text = msg.text.strip()
-    user_id = msg.from_user.id
+    # Word game trigger
+    if "words" in text:
+        current_word = get_random_word()
+        word_game_active = True
+        msg.reply(f"Rewrite a word and win stars: {current_word}")
 
-    if text == "رصيدي":
-        bal = balances.get(user_id, 0)
-        await msg.reply_text(f"رصيدك: {bal} نجوم")
+    # Word win logic
+    elif word_game_active and current_word.lower() in text:
+        user_balances[username] += 20
+        word_game_active = False
+        msg.reply("Done, you won 20 stars.")
 
-    elif text == "رصيده" and msg.reply_to_message:
-        target = msg.reply_to_message.from_user
-        bal = balances.get(target.id, 0)
-        await msg.reply_text(f"رصيده: {bal} نجوم")
+    # Balance check
+    elif "my balance" in text:
+        stars = user_balances.get(username, 0)
+        msg.reply(f"Your balance is: {stars} stars")
 
-# === العنوان ===
-async def handle_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.message.from_user.id
-    address = generate_address(user_id)
-    await update.message.reply_text(f"عنوانك الحالي: {address}")
+    # Transfer
+    elif "transfer" in text:
+        msg.reply("Send a username so I send him stars.")
+        app.set_parse_mode(None)
+        app.set_state(chat_id=msg.chat.id, user_id=user_id, state="awaiting_username")
 
-# === إرسال النجوم ===
-async def handle_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.message.from_user.id
-    text = update.message.text.strip()
+    elif app.get_state(chat_id=msg.chat.id, user_id=user_id) == "awaiting_username":
+        target = text.replace("@", "").strip()
+        if target in user_balances:
+            user_balances[target] += 10
+            msg.reply("Done!")
+        else:
+            msg.reply("Oops, Invalid username..")
+        app.set_state(chat_id=msg.chat.id, user_id=user_id, state=None)
 
-    if text == "إرسال":
-        pending_transfer[user_id] = {"step": 1, "target": None}
-        await update.message.reply_text("حسنا، للقيام بذلك؛ أرسلي عنوان رفيقك")
-    elif user_id in pending_transfer:
-        step = pending_transfer[user_id]["step"]
+    # Gemini AI query
+    elif text.startswith("darlene,") or text.startswith("/ask"):
+        question = msg.text.replace("darlene,", "").replace("/ask", "").strip()
+        if not question:
+            msg.reply("Please ask something.")
+            return
+        try:
+            reply = model.generate_content(question).text
+            msg.reply(reply)
+        except Exception as e:
+            msg.reply("Error using AI.")
 
-        # الخطوة 1: التحقق من العنوان
-        if step == 1:
-            if text in address_to_user:
-                target_id = address_to_user[text]
-                if target_id == user_id:
-                    await update.message.reply_text("لا يمكنك إرسال النجوم لنفسك.")
-                    del pending_transfer[user_id]
-                    return
-                pending_transfer[user_id]["target"] = target_id
-                pending_transfer[user_id]["step"] = 2
-                await update.message.reply_text("الٱن، ماهي كمية النجوم المراد إرسالها؟")
-            else:
-                await update.message.reply_text("مهلا، العنوان الذي أرسلته غير موجود.")
-                del pending_transfer[user_id]
-
-        # الخطوة 2: التحقق من الرصيد
-        elif step == 2:
-            try:
-                amount = int(text)
-                sender_balance = balances.get(user_id, 0)
-                if amount <= 0:
-                    raise ValueError
-
-                if sender_balance == 0:
-                    await update.message.reply_text("مهلا، ليس لديك رصيد للقيام بذلك..")
-                elif sender_balance < amount:
-                    await update.message.reply_text("رصيدك غير كافئ للقيام بهذه العملية..")
-                else:
-                    balances[user_id] = sender_balance - amount
-                    receiver = pending_transfer[user_id]["target"]
-                    balances[receiver] = balances.get(receiver, 0) + amount
-                    await update.message.reply_text("تم إرسال النجوم بنجاح.")
-            except ValueError:
-                await update.message.reply_text("يرجى كتابة عدد صحيح للنجوم.")
-            del pending_transfer[user_id]
-
-def main() -> None:
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-
-    # الأوامر بالنصوص داخل المجموعات فقط
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, send_challenge))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, check_answer))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, handle_balance))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, handle_address))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, handle_transfer))
-
-    logger.info("البوت يعمل الآن...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+app.run()
