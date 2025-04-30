@@ -19,21 +19,24 @@ logger = logging.getLogger(__name__)
 # === توكن البوت ===
 BOT_TOKEN = "7680410833:AAESNMhjnk__RSn1cwZB0Sj-4qMmqFfY3TU"
 
-# === البيانات ===
-balances = {}
-challenges = {}
-addresses = {}
-sending_state = {}
+# === بيانات البوت في الذاكرة ===
+balances = {}            # user_id: balance
+challenges = {}          # user_id: current_word
+addresses = {}           # user_id: static address
+address_to_user = {}     # address: user_id
+pending_transfer = {}    # user_id: {"step": 1, "target": None}
 
 WORDS_LIST = [
     "شجاع", "مبدع", "سريع", "صادق", "متميز",
     "متعاون", "مرن", "مبتكر", "حكيم", "مرح"
 ]
 
-# === إنشاء عنوان ثابت ===
-def get_user_address(user_id):
+# === توليد عنوان ثابت للمستخدم ===
+def generate_address(user_id: int) -> str:
     if user_id not in addresses:
-        addresses[user_id] = ''.join(random.choices('0123456789', k=10))
+        address = str(random.randint(1000000000, 9999999999))
+        addresses[user_id] = address
+        address_to_user[address] = user_id
     return addresses[user_id]
 
 # === /start ===
@@ -49,7 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "كل كلمة تعيد إرسالها تكسبك 20 نجمة!"
     )
 
-# === أمر "كلمات" ===
+# === "كلمات" ===
 async def send_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.message
     if msg.text == "كلمات":
@@ -57,89 +60,96 @@ async def send_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         challenges[msg.from_user.id] = word
         await msg.reply_text(f"أعد إرسال الكلمة التالية للحصول على المزيد من النجوم: {word}")
 
-# === التحقق من التحدي ===
+# === التحقق من الكلمة ===
 async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.message
     user_id = msg.from_user.id
     text = msg.text.strip()
+
     if user_id in challenges and text == challenges[user_id]:
         balances[user_id] = balances.get(user_id, 0) + 20
         await msg.reply_text("تهانينا، لقد فزت بـ20 نجوم.")
         del challenges[user_id]
 
-# === أوامر الرصيد ===
+# === الرصيد ===
 async def handle_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.message
     text = msg.text.strip()
+    user_id = msg.from_user.id
+
     if text == "رصيدي":
-        bal = balances.get(msg.from_user.id, 0)
+        bal = balances.get(user_id, 0)
         await msg.reply_text(f"رصيدك: {bal} نجوم")
+
     elif text == "رصيده" and msg.reply_to_message:
         target = msg.reply_to_message.from_user
         bal = balances.get(target.id, 0)
         await msg.reply_text(f"رصيده: {bal} نجوم")
 
-# === أمر العنوان ===
+# === العنوان ===
 async def handle_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.text == "عنواني":
-        addr = get_user_address(update.message.from_user.id)
-        await update.message.reply_text(f"عنوانك الحالي: {addr}")
+    user_id = update.message.from_user.id
+    address = generate_address(user_id)
+    await update.message.reply_text(f"عنوانك الحالي: {address}")
 
-# === أمر إرسال النجوم ===
-async def handle_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# === إرسال النجوم ===
+async def handle_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
     text = update.message.text.strip()
-    
+
     if text == "إرسال":
-        sending_state[user_id] = {"step": "awaiting_address"}
+        pending_transfer[user_id] = {"step": 1, "target": None}
         await update.message.reply_text("حسنا، للقيام بذلك؛ أرسلي عنوان رفيقك")
-    elif user_id in sending_state:
-        state = sending_state[user_id]
-        
-        if state["step"] == "awaiting_address":
-            state["address"] = text
-            state["step"] = "awaiting_amount"
-            await update.message.reply_text("الٱن، ماهي كمية النجوم المراد إرسالها؟")
-        elif state["step"] == "awaiting_amount":
+    elif user_id in pending_transfer:
+        step = pending_transfer[user_id]["step"]
+
+        # الخطوة 1: التحقق من العنوان
+        if step == 1:
+            if text in address_to_user:
+                target_id = address_to_user[text]
+                if target_id == user_id:
+                    await update.message.reply_text("لا يمكنك إرسال النجوم لنفسك.")
+                    del pending_transfer[user_id]
+                    return
+                pending_transfer[user_id]["target"] = target_id
+                pending_transfer[user_id]["step"] = 2
+                await update.message.reply_text("الٱن، ماهي كمية النجوم المراد إرسالها؟")
+            else:
+                await update.message.reply_text("مهلا، العنوان الذي أرسلته غير موجود.")
+                del pending_transfer[user_id]
+
+        # الخطوة 2: التحقق من الرصيد
+        elif step == 2:
             try:
                 amount = int(text)
+                sender_balance = balances.get(user_id, 0)
                 if amount <= 0:
-                    raise ValueError()
-            except ValueError:
-                await update.message.reply_text("الرجاء إدخال رقم صحيح.")
-                return
+                    raise ValueError
 
-            sender_balance = balances.get(user_id, 0)
-            if sender_balance == 0:
-                await update.message.reply_text("مهلا، ليس لديك رصيد للقيام بذلك..")
-            elif sender_balance < amount:
-                await update.message.reply_text("رصيدك غير كافئ للقيام بهذه العملية..")
-            else:
-                # البحث عن المستخدم الذي يملك هذا العنوان
-                recipient_id = None
-                for uid, addr in addresses.items():
-                    if addr == state["address"]:
-                        recipient_id = uid
-                        break
-                if recipient_id:
-                    balances[user_id] -= amount
-                    balances[recipient_id] = balances.get(recipient_id, 0) + amount
-                    await update.message.reply_text("تم إرسال النجوم بنجاح!")
+                if sender_balance == 0:
+                    await update.message.reply_text("مهلا، ليس لديك رصيد للقيام بذلك..")
+                elif sender_balance < amount:
+                    await update.message.reply_text("رصيدك غير كافئ للقيام بهذه العملية..")
                 else:
-                    await update.message.reply_text("هذا العنوان غير موجود.")
-            del sending_state[user_id]
+                    balances[user_id] = sender_balance - amount
+                    receiver = pending_transfer[user_id]["target"]
+                    balances[receiver] = balances.get(receiver, 0) + amount
+                    await update.message.reply_text("تم إرسال النجوم بنجاح.")
+            except ValueError:
+                await update.message.reply_text("يرجى كتابة عدد صحيح للنجوم.")
+            del pending_transfer[user_id]
 
-# === main ===
 def main() -> None:
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
 
+    # الأوامر بالنصوص داخل المجموعات فقط
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, send_challenge))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, check_answer))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, handle_balance))
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, handle_address))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, handle_send))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.SUPERGROUP, handle_transfer))
 
     logger.info("البوت يعمل الآن...")
     app.run_polling()
