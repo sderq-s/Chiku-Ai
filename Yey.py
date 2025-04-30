@@ -14,7 +14,7 @@ words = ["Boys", "Girls", "Cats", "Dogs", "Horses"]
 
 # دالة لعرض الرصيد
 def balance(update: Update, context: CallbackContext):
-    user_id = update.message.from_user.id
+    user_id = update.effective_user.id  # تم تعديل هذا السطر
     balance = user_balances.get(user_id, 0)
     update.message.reply_text(f'Your balance is: {balance} stars')
 
@@ -25,7 +25,7 @@ def word_game(update: Update, context: CallbackContext):
 
 # دالة للتحقق من الكلمة المدخلة
 def check_word(update: Update, context: CallbackContext):
-    user_id = update.message.from_user.id
+    user_id = update.effective_user.id  # تم تعديل هذا السطر
     user_input = update.message.text
     
     if user_input in words:
