@@ -1,87 +1,123 @@
-import random
 from pyrogram import Client, filters
-import google.generativeai as genai
+from pyrogram.types import Message
+import random
+import json
+import os
+import requests
 
-API_ID = 123456  # Replace with your API ID
-API_HASH = "your_api_hash"  # Replace with your API HASH
-BOT_TOKEN = "your_bot_token"
-
-# Gemini setup
+API_ID = 21613960
+API_HASH = "7a3c0a16230bb95af0b80403e81d0b7b"
+BOT_TOKEN = "7680410833:AAESNMhjnk__RSn1cwZB0Sj-4qMmqFfY3TU"
 GEMINI_API_KEY = "AIzaSyCqsASbw2mXQLOmXI3eGGp3jGdF_wiW4W8"
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-pro")
+DATA_FILE = "user_data.json"
 
-app = Client("group_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client("star_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# User data
-user_balances = {}
-word_game_active = False
-current_word = ""
+# Load or initialize user data
+if os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "r") as f:
+        users = json.load(f)
+else:
+    users = {}
 
-# Random word generator
-def get_random_word():
-    words = ["Tree", "River", "Lion", "Music", "Ocean", "Space", "Stone"]
-    return random.choice(words)
+current_word = None
 
-# Handlers
-@app.on_message(filters.command("start") & filters.private)
-def start(_, msg):
-    msg.reply("Bot is active in your group!")
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump(users, f)
+
+def get_balance(user_id):
+    return users.get(str(user_id), {}).get("stars", 0)
+
+def add_stars(user_id, amount):
+    uid = str(user_id)
+    if uid not in users:
+        users[uid] = {"stars": 0}
+    users[uid]["stars"] += amount
+    save_data()
+
+def set_transfer_target(chat_id, target_username):
+    users[str(chat_id)]["transfer_target"] = target_username
+    save_data()
+
+def get_transfer_target(chat_id):
+    return users.get(str(chat_id), {}).get("transfer_target")
 
 @app.on_message(filters.text & filters.group)
-def handle_message(_, msg):
-    global word_game_active, current_word
+async def handle_messages(client, message: Message):
+    global current_word
+    user_id = message.from_user.id
+    text = message.text.strip()
 
-    text = msg.text.lower()
-    user_id = msg.from_user.id
-    username = msg.from_user.username or f"user_{user_id}"
+    # Word Game Trigger
+    if text.lower() == "words":
+        current_word = random.choice(["Sky", "Apple", "Dream", "Python", "Book"])
+        await message.reply(f"Rewrite a word and win stars: {current_word}")
+    
+    # Winning the word game
+    elif current_word and text == current_word:
+        add_stars(user_id, 20)
+        await message.reply("Done, you won 20 stars.")
+        current_word = None
 
-    # Initialize balance
-    if username not in user_balances:
-        user_balances[username] = 0
+    # Check balance
+    elif "رصيدي" in text or text.lower() == "my balance":
+        stars = get_balance(user_id)
+        await message.reply(f"Your balance is: {stars} stars")
 
-    # Word game trigger
-    if "words" in text:
-        current_word = get_random_word()
-        word_game_active = True
-        msg.reply(f"Rewrite a word and win stars: {current_word}")
+    # Star transfer start
+    elif text.lower() == "transfer":
+        if str(message.chat.id) not in users:
+            users[str(message.chat.id)] = {}
+        set_transfer_target(message.chat.id, None)
+        await message.reply("Send a username so I send him stars.")
 
-    # Word win logic
-    elif word_game_active and current_word.lower() in text:
-        user_balances[username] += 20
-        word_game_active = False
-        msg.reply("Done, you won 20 stars.")
+    # Receive username for transfer
+    elif get_transfer_target(message.chat.id) is None and text.startswith("@"):
+        recipient = text[1:]
+        target_user = None
 
-    # Balance check
-    elif "my balance" in text:
-        stars = user_balances.get(username, 0)
-        msg.reply(f"Your balance is: {stars} stars")
+        for uid, info in users.items():
+            if info.get("username", "").lower() == recipient.lower():
+                target_user = uid
+                break
 
-    # Transfer
-    elif "transfer" in text:
-        msg.reply("Send a username so I send him stars.")
-        app.set_parse_mode(None)
-        app.set_state(chat_id=msg.chat.id, user_id=user_id, state="awaiting_username")
-
-    elif app.get_state(chat_id=msg.chat.id, user_id=user_id) == "awaiting_username":
-        target = text.replace("@", "").strip()
-        if target in user_balances:
-            user_balances[target] += 10
-            msg.reply("Done!")
+        if target_user:
+            add_stars(target_user, 10)
+            await message.reply("Done!")
         else:
-            msg.reply("Oops, Invalid username..")
-        app.set_state(chat_id=msg.chat.id, user_id=user_id, state=None)
+            await message.reply("Oops, Invalid username..")
+        set_transfer_target(message.chat.id, None)
 
-    # Gemini AI query
-    elif text.startswith("darlene,") or text.startswith("/ask"):
-        question = msg.text.replace("darlene,", "").replace("/ask", "").strip()
-        if not question:
-            msg.reply("Please ask something.")
-            return
-        try:
-            reply = model.generate_content(question).text
-            msg.reply(reply)
-        except Exception as e:
-            msg.reply("Error using AI.")
+    # Gemini AI Q&A
+    elif text.startswith("Darlene, ") or text.startswith("/ask "):
+        query = text.replace("Darlene, ", "").replace("/ask ", "")
+        reply = gemini_response(query)
+        await message.reply(reply)
+
+    # Store username if available
+    if message.from_user.username:
+        uid = str(user_id)
+        if uid not in users:
+            users[uid] = {}
+        users[uid]["username"] = message.from_user.username
+        save_data()
+
+def gemini_response(prompt):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    headers = {"Content-Type": "application/json"}
+    data = {
+        "contents": [
+            {
+                "parts": [{"text": prompt}]
+            }
+        ]
+    }
+    try:
+        res = requests.post(url, headers=headers, json=data)
+        output = res.json()
+        return output['candidates'][0]['content']['parts'][0]['text']
+    except Exception:
+        return "Sorry, I couldn't answer that."
 
 app.run()
